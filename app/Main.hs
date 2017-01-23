@@ -31,10 +31,13 @@ blogPostToDocument b = [ "blogPostName" := (String (blogPostName b))
                        , "blogPostBody" := (String (blogPostBody b))
                        , "blogPostImageSrc" := (String (fst (blogPostImage b)))
                        , "blogPostImageAlt" := (String (snd (blogPostImage b)))
-                       ] ++
-                       [ (T.pack ("blogPostLinkHref" ++ (show n))) := (String (fst ((blogPostLinks b) !! (n-1)))) | n <- [1..(length (blogPostLinks b))] ] ++
-                       [ (T.pack ("blogPostLinkText" ++ (show n))) := (String (snd href)) | href <- (blogPostLinks b), n <- [1..(length (blogPostLinks b))] ]
---                       [ (T.pack ("blogPostLinkText" ++ (show n))) := (String (snd ((blogPostLinks b) !! (n-1)))) | n <- [1..(length (blogPostLinks b))] ]
+                       ] ++ blogPostLinksToDocument (blogPostLinks b) 0
+
+blogPostLinksToDocument :: [(T.Text, T.Text)] -> Int -> Document
+blogPostLinksToDocument [] _     = []
+blogPostLinksToDocument (l:ls) i = [ T.pack ("blogPostLinkHref" ++ (show i)) := (String (fst l))
+                                   , T.pack ("blogPostLinkText" ++ (show i)) := (String (snd l))
+                                   ] ++ (blogPostLinksToDocument ls (i+1))
 
 sampleBlogPosts :: [BlogPost]
 sampleBlogPosts =
