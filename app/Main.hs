@@ -39,6 +39,36 @@ blogPostLinksToDocument (l:ls) i = [ T.pack ("blogPostLinkHref" ++ (show i)) := 
                                    , T.pack ("blogPostLinkText" ++ (show i)) := (String (snd l))
                                    ] ++ (blogPostLinksToDocument ls (i+1))
 
+documentToBlogPost :: Document -> BlogPost
+documentToBlogPost document =
+  let bName = "blogPostName" `at` document
+      bBody = "blogPostBody" `at` document
+      bImageSrc = "blogPostImageSrc" `at` document
+      bImageAlt = "blogPostImageAlt" `at` document
+  in BlogPost bName bBody (bImageSrc, bImageAlt) (documentToBlogPostLinks document 0)
+
+documentToBlogPostLinks :: Document -> Int -> [(T.Text, T.Text)]
+documentToBlogPostLinks document index =
+  let bLinkHref = findBlogPostLinkHref document index
+      bLinkText = findBlogPostLinkText document index
+  in case bLinkHref of
+    [] -> []
+    bs -> bs ++ (documentToBlogPostLinks document (index+1))
+
+findBlogPostLinkHref :: Document -> Int -> [(T.Text, T.Text)]
+findBlogPostLinkHref document index =
+  let bLinkHrefMaybe = document !? T.pack ("blogPostLinkHref" ++ (show index))
+  in case bLinkHrefMaybe of
+    Nothing -> []
+    Just href -> [(T.pack ("blogPostLinkHref" ++ (show index)), href)]
+
+findBlogPostLinkText :: Document -> Int -> [(T.Text, T.Text)]
+findBlogPostLinkText document index =
+  let bLinkTextMaybe = document !? T.pack ("blogPostLinkText" ++ (show index))
+  in case bLinkTextMaybe of
+    Nothing -> []
+    Just text -> [(T.pack ("blogPostLinkText" ++ (show index)), text)]
+
 sampleBlogPosts :: [BlogPost]
 sampleBlogPosts =
   let ba = BlogPost "First Blog Post" "How can I insert data into the data structure" ("http://tenggren.net/product.jpg", "Product") [("http://google.com", "Google"), ("http://svt.se", "SVT")]
