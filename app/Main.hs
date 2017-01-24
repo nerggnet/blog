@@ -16,7 +16,7 @@ import qualified Data.Text.Lazy as LT
 import qualified Data.Text as T
 import Data.Bson
 import Network.HTTP.Types.Status
-  
+
 -- Model
 
 data BlogPost =
@@ -25,19 +25,20 @@ data BlogPost =
            , blogPostImage :: (T.Text, T.Text)   -- (src, alt)
            , blogPostLinks :: [(T.Text, T.Text)] -- [(href, text)]
            }
+  deriving (Show, Eq, Typeable)
 
 blogPostToDocument :: BlogPost -> Document
-blogPostToDocument b = [ "blogPostName" := (String (blogPostName b))
-                       , "blogPostBody" := (String (blogPostBody b))
-                       , "blogPostImageSrc" := (String (fst (blogPostImage b)))
-                       , "blogPostImageAlt" := (String (snd (blogPostImage b)))
+blogPostToDocument b = [ "blogPostName" := String (blogPostName b)
+                       , "blogPostBody" := String (blogPostBody b)
+                       , "blogPostImageSrc" := String (fst (blogPostImage b))
+                       , "blogPostImageAlt" := String (snd (blogPostImage b))
                        ] ++ blogPostLinksToDocument (blogPostLinks b) 0
 
 blogPostLinksToDocument :: [(T.Text, T.Text)] -> Int -> Document
 blogPostLinksToDocument [] _     = []
-blogPostLinksToDocument (l:ls) i = [ T.pack ("blogPostLinkHref" ++ (show i)) := (String (fst l))
-                                   , T.pack ("blogPostLinkText" ++ (show i)) := (String (snd l))
-                                   ] ++ (blogPostLinksToDocument ls (i+1))
+blogPostLinksToDocument (l:ls) i = [ T.pack ("blogPostLinkHref" ++ (show i)) := String (fst l)
+                                   , T.pack ("blogPostLinkText" ++ (show i)) := String (snd l)
+                                   ] ++ blogPostLinksToDocument ls (i+1)
 
 documentToBlogPost :: Document -> BlogPost
 documentToBlogPost document =
@@ -49,25 +50,12 @@ documentToBlogPost document =
 
 documentToBlogPostLinks :: Document -> Int -> [(T.Text, T.Text)]
 documentToBlogPostLinks document index =
-  let bLinkHref = findBlogPostLinkHref document index
-      bLinkText = findBlogPostLinkText document index
-  in case bLinkHref of
-    [] -> []
-    bs -> bs ++ (documentToBlogPostLinks document (index+1))
-
-findBlogPostLinkHref :: Document -> Int -> [(T.Text, T.Text)]
-findBlogPostLinkHref document index =
-  let bLinkHrefMaybe = document !? T.pack ("blogPostLinkHref" ++ (show index))
-  in case bLinkHrefMaybe of
-    Nothing -> []
-    Just href -> [(T.pack ("blogPostLinkHref" ++ (show index)), href)]
-
-findBlogPostLinkText :: Document -> Int -> [(T.Text, T.Text)]
-findBlogPostLinkText document index =
-  let bLinkTextMaybe = document !? T.pack ("blogPostLinkText" ++ (show index))
-  in case bLinkTextMaybe of
-    Nothing -> []
-    Just text -> [(T.pack ("blogPostLinkText" ++ (show index)), text)]
+  let bLinkHref = document !? T.pack ("blogPostLinkHref" ++ (show index))
+      bLinkText = document !? T.pack ("blogPostLinkText" ++ (show index))
+  in case (bLinkHref, bLinkText) of
+    (Nothing, _) -> []
+    (_, Nothing) -> []
+    (Just h, Just t) -> (h, t) : documentToBlogPostLinks document (index+1)
 
 sampleBlogPosts :: [BlogPost]
 sampleBlogPosts =
@@ -103,9 +91,19 @@ fetchAllProjects pipe = do
   return $ map documentToProject ps
   where
     run = getAllProjects
-    
+
+fetchAllBlogPosts :: DB.Pipe -> IO [BlogPost]
+fetchAllBlogPosts pipe = do
+  ps <- DB.access pipe DB.master "blogPosts" run
+  return $ map documentToBlogPost ps
+  where
+    run = getAllBlogPosts
+
 getAllProjects :: DB.Action IO [DB.Document]
 getAllProjects = DB.rest =<< DB.find (DB.select [] "projects") {DB.sort = ["projectName" =: (1 :: Int)]}
+
+getAllBlogPosts :: DB.Action IO [DB.Document]
+getAllBlogPosts = DB.rest =<< DB.find (DB.select [] "blogPosts") {DB.sort = ["blogPostName" =: (1 :: Int)]}
 
 insertProject :: Project -> DB.Pipe -> IO ()
 insertProject project pipe = do
@@ -113,6 +111,13 @@ insertProject project pipe = do
   return ()
   where
     run = DB.insert "projects" (projectToDocument project)
+
+insertBlogPost :: BlogPost -> DB.Pipe -> IO ()
+insertBlogPost blogPost pipe = do
+  DB.access pipe DB.master "blogPosts" run
+  return ()
+  where
+    run = DB.insert "blogPosts" (blogPostToDocument blogPost)
 
 -- Spock Actions
 
@@ -123,6 +128,14 @@ getProjects = do
     h1_ "Projects"
     renderProjects allProjects
     link "/add-project" "Add Your Project!"
+
+getBlogPosts :: SpockAction DB.Pipe session state ()
+getBlogPosts = do
+  allBlogPosts <- runQuery fetchAllBlogPosts
+  lucid $ pageTemplate $ do
+    h1_ "Blog"
+    renderBlogPosts allBlogPosts
+    link "/add-blog-post" "Add Your Blog Post!"
 
 postProject :: SpockAction DB.Pipe session state ()
 postProject = do
@@ -145,7 +158,7 @@ projectFromPOST = runMaybeT $ do
 addProjectForm :: SpockAction database session state ()
 addProjectForm =
   lucid $
-    pageTemplate $ 
+    pageTemplate $
       form_ [ method_ "post", action_ "/projects" ] $ do
         p_ $ do
           label_ "Project  "
@@ -187,7 +200,7 @@ dbConn =
                              }
   in PCConn cBuilder
 
--- Lucid View 
+-- Lucid View
 
 projectToRow :: Project -> Html ()
 projectToRow project =
@@ -195,6 +208,13 @@ projectToRow project =
     td_ (toHtml (projectName project))
     td_ (toHtml (projectDescription project))
     td_ (toHtml (projectAuthors project))
+
+blogPostToRow :: BlogPost -> Html ()
+blogPostToRow blogPost =
+  tr_ $ do
+    td_ (toHtml (blogPostName blogPost))
+    td_ (toHtml (blogPostBody blogPost))
+    td_ (toHtml (T.pack ("(" ++ show (fst (blogPostImage blogPost)) ++ ", " ++ show (snd (blogPostImage blogPost)) ++ ")")))
 
 renderProjects :: [Project] -> Html ()
 renderProjects projects =
@@ -206,6 +226,16 @@ renderProjects projects =
         th_ "Authors"
       tbody_ (foldMap projectToRow projects)
 
+renderBlogPosts :: [BlogPost] -> Html ()
+renderBlogPosts blogPosts =
+  table_ $ do
+    thead_ $ do
+      tr_ $ do
+        th_ "Name"
+        th_ "Body"
+        th_ "Image"
+        th_ "Links"
+      tbody_ (foldMap blogPostToRow blogPosts)
 
 pageTemplate :: Html () -> Html ()
 pageTemplate contents =
@@ -219,4 +249,3 @@ pageTemplate contents =
 
 link :: T.Text -> Html () -> Html ()
 link url caption = a_ [href_ url] caption
-
