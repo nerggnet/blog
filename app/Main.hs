@@ -171,8 +171,23 @@ blogPostFromPOST = runMaybeT $ do
   name <- MaybeT $ param "name"
   body <- MaybeT $ param "body"
   imageSrc <- MaybeT $ param "imageSrc"
-  imageAlt <- MaybeT $ param "imageAlt"
-  return $ BlogPost name body imageSrc imageAlt
+  imageAlt <- MaybeT $ param "imageAlt" -- :: MaybeT (ActionCtxT () (WebStateM database session state)) T.Text
+  return $ BlogPost name body (imageSrc, imageAlt) []
+
+blogPostFromPOST2 :: Int -> SpockAction database session state (Maybe BlogPost)
+blogPostFromPOST2 n = runMaybeT $ do
+  name <- MaybeT $ param "name"
+  body <- MaybeT $ param "body"
+  imageSrc <- MaybeT $ param "imageSrc"
+  imageAlt <- MaybeT $ param "imageAlt" -- :: MaybeT (ActionCtxT () (WebStateM database session state)) T.Text
+  return $ BlogPost name body (imageSrc, imageAlt) (blogPostLinksFromPOST n)
+
+blogPostLinksFromPOST :: Int -> SpockAction database session state (Maybe [(T.Text, T.Text)])
+blogPostLinksFromPOST 0 = []
+blogPostLinksFromPOST n =
+  let href = param (T.pack ("linkHref" ++ (show n)))
+      text = MaybeT $ param (T.pack ("linkText" ++ (show n)))
+  in (href, text) : blogPostLinksFromPOST (n-1)
 
 addProjectForm :: SpockAction database session state ()
 addProjectForm =
