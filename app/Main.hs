@@ -148,12 +148,31 @@ postProject = do
       runQuery (insertProject project)
       redirect "/"
 
+postBlogPost :: SpockAction DB.Pipe session state ()
+postBlogPost = do
+  maybeBlogPost <- blogPostFromPOST
+  case maybeBlogPost of
+    Nothing -> do
+      lucid (p_ "A blog post was not submitted.")
+      setStatus status400
+    Just blogPost -> do
+      runQuery (insertBlogPost blogPost)
+      redirect "/"
+
 projectFromPOST :: SpockAction database session state (Maybe Project)
 projectFromPOST = runMaybeT $ do
   name <- MaybeT $ param "name"
   desc <- MaybeT $ param "description"
   auth <- MaybeT $ param "author"
   return $ Project name desc auth
+
+blogPostFromPOST :: SpockAction database session state (Maybe BlogPost)
+blogPostFromPOST = runMaybeT $ do
+  name <- MaybeT $ param "name"
+  body <- MaybeT $ param "body"
+  imageSrc <- MaybeT $ param "imageSrc"
+  imageAlt <- MaybeT $ param "imageAlt"
+  return $ BlogPost name body imageSrc imageAlt
 
 addProjectForm :: SpockAction database session state ()
 addProjectForm =
@@ -170,6 +189,25 @@ addProjectForm =
           label_ "Author  "
           input_ [ name_ "author"]
         input_ [ type_ "submit", value_ "Add project"]
+
+addBlogPostForm :: SpockAction database session state ()
+addBlogPostForm =
+  lucid $
+    pageTemplate $
+      form_ [ method_ "post", action_ "/blog-posts" ] $ do
+        p_ $ do
+          label_ "Blog Post Name "
+          input_ [ name_ "name" ]
+        p_ $ do
+          label_ "Body "
+          input_ [ name_ "body"]
+        p_ $ do
+          label_ "Image Src "
+          input_ [ name_ "imageSrc" ]
+        p_ $ do
+          label_ "Image Alt "
+          input_ [ name_ "imageAlt" ]
+        input_ [ type_ "submit", value_ "Add Blog Post" ]
 
 lucid :: Html () -> SpockAction database session state ()
 lucid document = html (LT.toStrict (renderText document))
