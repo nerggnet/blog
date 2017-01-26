@@ -63,7 +63,34 @@ sampleBlogPosts =
       bb = BlogPost "Second Blog Post" "Getting warm" ("http://tenggren.net/kajak.jpg", "Kajak") [("http://haskell.org", "Haskell"), ("http://spock.li", "Spock")]
   in [ba, bb]
 
+data Project =
+  Project { projectName        :: T.Text
+          , projectDescription :: T.Text
+          , projectAuthors     :: T.Text
+          }
+  deriving (Show, Eq, Typeable)
+
+projectToDocument :: Project -> Document
+projectToDocument p = [ "projectName"        := String (projectName p)
+                      , "projectDescription" := String (projectDescription p)
+                      , "projectAuthors"     := String (projectAuthors p)
+                      ]
+
+documentToProject :: Document -> Project
+documentToProject document =
+  let pName = "projectName" `at` document
+      pDesc = "projectDescription" `at` document
+      pAuth = "projectAuthors" `at` document
+  in Project pName pDesc pAuth
+
 -- Database Actions
+
+fetchAllProjects :: DB.Pipe -> IO [Project]
+fetchAllProjects pipe = do
+  ps <- DB.access pipe DB.master "projects" run
+  return $ map documentToProject ps
+  where
+    run = getAllProjects
 
 fetchAllBlogPosts :: DB.Pipe -> IO [BlogPost]
 fetchAllBlogPosts pipe = do
@@ -72,8 +99,18 @@ fetchAllBlogPosts pipe = do
   where
     run = getAllBlogPosts
 
+getAllProjects :: DB.Action IO [DB.Document]
+getAllProjects = DB.rest =<< DB.find (DB.select [] "projects") {DB.sort = ["projectName" =: (1 :: Int)]}
+
 getAllBlogPosts :: DB.Action IO [DB.Document]
 getAllBlogPosts = DB.rest =<< DB.find (DB.select [] "blogPosts") {DB.sort = ["blogPostName" =: (1 :: Int)]}
+
+insertProject :: Project -> DB.Pipe -> IO ()
+insertProject project pipe = do
+  DB.access pipe DB.master "projects" run
+  return ()
+  where
+    run = DB.insert "projects" (projectToDocument project)
 
 insertBlogPost :: BlogPost -> DB.Pipe -> IO ()
 insertBlogPost blogPost pipe = do
@@ -84,6 +121,14 @@ insertBlogPost blogPost pipe = do
 
 -- Spock Actions
 
+getProjects :: SpockAction DB.Pipe session state ()
+getProjects = do
+  allProjects <- runQuery fetchAllProjects
+  lucid $ pageTemplate $ do
+    h1_ "Projects"
+    renderProjects allProjects
+    link "/add-project" "Add Your Project!"
+
 getBlogPosts :: SpockAction DB.Pipe session state ()
 getBlogPosts = do
   allBlogPosts <- runQuery fetchAllBlogPosts
@@ -91,6 +136,17 @@ getBlogPosts = do
     h1_ "Blog"
     renderBlogPosts allBlogPosts
     link "/add-blog-post" "Add Your Blog Post!"
+
+postProject :: SpockAction DB.Pipe session state ()
+postProject = do
+  maybeProject <- projectFromPOST
+  case maybeProject of
+    Nothing -> do
+      lucid (p_ "A project was not submitted.")
+      setStatus status400
+    Just project -> do
+      runQuery (insertProject project)
+      redirect "/"
 
 postBlogPost :: SpockAction DB.Pipe session state ()
 postBlogPost = do
@@ -102,6 +158,13 @@ postBlogPost = do
     Just blogPost -> do
       runQuery (insertBlogPost blogPost)
       redirect "/"
+
+projectFromPOST :: SpockAction database session state (Maybe Project)
+projectFromPOST = runMaybeT $ do
+  name <- MaybeT $ param "name"
+  desc <- MaybeT $ param "description"
+  auth <- MaybeT $ param "author"
+  return $ Project name desc auth
 
 blogPostFromPOST :: SpockAction database session state (Maybe BlogPost)
 blogPostFromPOST = runMaybeT $ do
@@ -120,6 +183,22 @@ blogPostFromPOST = runMaybeT $ do
   linkHref4 <- MaybeT $ param "linkHref4"
   linkText4 <- MaybeT $ param "linkText4"
   return $ BlogPost name body (imageSrc, imageAlt) [(linkHref0, linkText0), (linkHref1, linkText1), (linkHref2, linkText2), (linkHref3, linkText3), (linkHref4, linkText4)]
+
+addProjectForm :: SpockAction database session state ()
+addProjectForm =
+  lucid $
+    pageTemplate $
+      form_ [ method_ "post", action_ "/projects" ] $ do
+        p_ $ do
+          label_ "Project  "
+          input_ [ name_ "name"]
+        p_ $ do
+          label_ "Description  "
+          input_ [ name_ "description" ]
+        p_ $ do
+          label_ "Author  "
+          input_ [ name_ "author"]
+        input_ [ type_ "submit", value_ "Add project"]
 
 addBlogPostForm :: SpockAction database session state ()
 addBlogPostForm =
@@ -183,6 +262,12 @@ main = do
 
 app :: SpockM DB.Pipe session state ()
 app = do
+  get "/" getProjects
+  post "/projects" postProject
+  get "/add-project" addProjectForm
+
+appBlog :: SpockM DB.Pipe session state ()
+appBlog = do
   get "/" getBlogPosts
   post "/blog-posts" postBlogPost
   get "/add-blog-post" addBlogPostForm
@@ -201,19 +286,29 @@ dbConn =
 
 -- Lucid View
 
+projectToRow :: Project -> Html ()
+projectToRow project =
+  tr_ $ do
+    td_ (toHtml (projectName project))
+    td_ (toHtml (projectDescription project))
+    td_ (toHtml (projectAuthors project))
+
 blogPostToRow :: BlogPost -> Html ()
 blogPostToRow blogPost =
   tr_ $ do
     td_ (toHtml (blogPostName blogPost))
     td_ (toHtml (blogPostBody blogPost))
     td_ (toHtml (T.pack ("(" ++ show (fst (blogPostImage blogPost)) ++ ", " ++ show (snd (blogPostImage blogPost)) ++ ")")))
-    td_ (toHtml $ linksToText $ blogPostLinks blogPost)
 
-linksToText :: [(T.Text, T.Text)] -> T.Text
-linksToText [] = ""
-linksToText (("",_):_) = ""
-linksToText ((_,""):_) = ""
-linksToText ((h,t):ls) = T.append (T.pack ("href: " ++ show h ++ ", text: " ++ show t ++ ", ")) (linksToText ls)
+renderProjects :: [Project] -> Html ()
+renderProjects projects =
+  table_ $
+    thead_ $ do
+      tr_ $ do
+        th_ "Name"
+        th_ "Description"
+        th_ "Authors"
+      tbody_ (foldMap projectToRow projects)
 
 renderBlogPosts :: [BlogPost] -> Html ()
 renderBlogPosts blogPosts =
