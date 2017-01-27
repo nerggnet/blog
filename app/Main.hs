@@ -131,7 +131,9 @@ addBlogPostForm =
           input_ [ name_ "name" ]
         p_ $ do
           label_ "Body "
-          input_ [ name_ "body"]
+          --input_ [ name_ "body"]
+          --textarea_ mempty -- [ name_ "body" ]
+          termWith "textarea" [ name_ "body" ] mempty
         p_ $ do
           label_ "Image Src "
           input_ [ name_ "imageSrc" ]

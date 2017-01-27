@@ -10,10 +10,10 @@ table           { border: 1px solid gray; border-collapse: collapse;
 td              { border: 1px solid gray; padding: 20px; }
 th              { border: 1px solid #000; background-color: gray; color: #FFF; padding: 20px; }
 a               { color: black; }
+textarea        { font-family: inherit; font-size: inherit; }
 
 .login          { margin-left: 8.5em; }
 .gt             { color: green; font-weight: bold; }
 .le, .user      { color: red; font-weight: bold; }
 .error          { background: #F0D6D6; text-align: center; padding: 0.5em; }
 .info           { background: #00BFFF; text-align: center; padding: 0.5em; }
-
