@@ -208,8 +208,16 @@ blogPostToRow blogPost =
   tr_ $ do
     td_ (toHtml (blogPostName blogPost))
     td_ (toHtml (blogPostBody blogPost))
-    td_ (toHtml (T.pack ("(" ++ show (fst (blogPostImage blogPost)) ++ ", " ++ show (snd (blogPostImage blogPost)) ++ ")")))
-    td_ (toHtml $ linksToText $ blogPostLinks blogPost)
+    --td_ (toHtml (T.pack ("(" ++ show (fst (blogPostImage blogPost)) ++ ", " ++ show (snd (blogPostImage blogPost)) ++ ")")))
+    td_ $ img_ [ src_ (fst (blogPostImage blogPost)), alt_ (snd (blogPostImage blogPost)), style_ "width:100px" ]
+    --td_ (toHtml $ linksToText $ blogPostLinks blogPost)
+    td_ $ foldMap linkToLink $ blogPostLinks blogPost
+
+linkToLink :: (T.Text, T.Text) -> Html ()
+linkToLink ("",_) = ""
+linkToLink (_,"") = ""
+linkToLink (h,t) = do link h $ toHtml t; br_ []
+--linksToLinks ((h,t):ls) = T.append (T.pack ("href: " ++ show h ++ ", text: " ++ show t ++ ", ")) (linksToText ls)
 
 linksToText :: [(T.Text, T.Text)] -> T.Text
 linksToText [] = ""
