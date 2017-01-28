@@ -26,3 +26,6 @@ executable blog
                      , text
                      , transformers
                      , network
+                     , datetime
+                     , time
+                     , split
